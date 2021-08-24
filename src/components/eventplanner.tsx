@@ -23,6 +23,17 @@ const tableConfig: ITableConfigRow[] = [
 	{ width: 1, column: 'medicine_skill.core', title: <img alt="Medicine" src={`${process.env.GATSBY_ASSETS_URL}atlas/icon_medicine_skill.png`} style={{ height: '1.1em' }} /> }
 ];
 
+const skirmishConfig: ITableConfigRow[] = [
+	{ width: 3, column: 'name', title: 'Crew', pseudocolumns: ['name', 'max_rarity', 'level'] },
+	{ width: 1, column: 'attack', title: 'Attack' },
+	{ width: 1, column: 'accuracy', title: 'Accuracy' },
+	{ width: 1, column: 'evasion', title: 'Evasion' },
+	{ width: 1, column: 'ship_battle.accuracy', title: 'Accuracy' },
+	{ width: 1, column: 'ship_battle.crit_bonus', title: 'Crit Bonus' },
+	{ width: 1, column: 'ship_battle.crit_chance', title: 'Crit Rating' },
+	{ width: 1, column: 'ship_battle.evasion', title: 'Evasion' }
+];
+
 type EventPlannerProps = {
 	playerData: any;
 	eventData: any;
@@ -39,6 +50,12 @@ const EventPlanner = (props: EventPlannerProps) => {
 	playerData.player.character.crew.forEach(crew => {
 		let crewman = JSON.parse(JSON.stringify(crew));
 		crewman.id = fakeID++;
+
+		// Attach ship actions as separate, sortable properties
+		crewman.attack = 0;
+		crewman.evasion = 0;
+		crewman.accuracy = 0;
+		if (crew.action) crewman[CONFIG.CREW_SHIP_BATTLE_BONUS_TYPE[crew.action.bonus_type].toLowerCase()] = crew.action.bonus_amount;
 
 		// Re-attach active_status property
 		crewman.active_status = 0;
@@ -174,6 +191,14 @@ const EventPicker = (props: EventPickerProps) => {
 				result.featured.push(symbol);
 			}
 			// Skirmish also uses activePhase.bonus_traits to identify smaller bonus event crew
+			activePhase.bonus_traits.forEach((trait: string) => {
+				let bonusCrew = allCrew.filter((c) => c.traits.indexOf(trait) >= 0 || c.traits_hidden.indexOf(trait) >= 0);
+				bonusCrew.forEach((c) => {
+					if (result.bonus.indexOf(c.symbol) < 0) {
+						result.bonus.push(c.symbol);
+					}
+				});
+			});
 		}
 
 		return result;
@@ -259,14 +284,46 @@ const EventCrewTable = (props: EventCrewTableProps) => {
 			</div>
 			<SearchableTable
 				id={"eventplanner"}
-				data={bonusCrew}
-				config={tableConfig}
-				renderTableRow={(crew, idx) => renderTableRow(crew, idx)}
+				data={myCrew}
+				config={phaseType == "skirmish" ? skirmishConfig : tableConfig}
+				renderTableRow={(crew, idx) => phaseType == "skirmish" ? renderSkirmishRow(crew, idx) : renderTableRow(crew, idx)}
 				filterRow={(crew, filters, filterType) => showThisCrew(crew, filters, filterType)}
 				showFilterOptions="true"
 			/>
 		</React.Fragment>
 	);
+
+	function renderSkirmishRow(crew: any, idx: number): JSX.Element {
+		return (
+			<Table.Row key={idx} style={{ cursor: 'zoom-in' }} onClick={() => navigate(`/crew/${crew.symbol}/`)}>
+				<Table.Cell>
+					<div
+						style={{
+							display: 'grid',
+							gridTemplateColumns: '60px auto',
+							gridTemplateAreas: `'icon stats' 'icon description'`,
+							gridGap: '1px'
+						}}
+					>
+						<div style={{ gridArea: 'icon' }}>
+							<img width={48} src={`${process.env.GATSBY_ASSETS_URL}${crew.imageUrlPortrait}`} />
+						</div>
+						<div style={{ gridArea: 'stats' }}>
+							<span style={{ fontWeight: 'bolder', fontSize: '1.25em' }}>{crew.name}</span>
+						</div>
+						<div style={{ gridArea: 'description' }}>{descriptionLabel(crew)}</div>
+					</div>
+				</Table.Cell>
+				<Table.Cell textAlign='center'><b>{crew.attack > 0 ? crew.attack : ''}</b></Table.Cell>
+				<Table.Cell textAlign='center'><b>{crew.accuracy > 0 ? crew.accuracy : ''}</b></Table.Cell>
+				<Table.Cell textAlign='center'><b>{crew.evasion > 0 ? crew.evasion : ''}</b></Table.Cell>
+				<Table.Cell textAlign='center'><b>+{crew.ship_battle!.accuracy ?? 0}</b></Table.Cell>
+				<Table.Cell textAlign='center'><b>+{crew.ship_battle!.crit_bonus ?? 0}</b></Table.Cell>
+				<Table.Cell textAlign='center'><b>+{crew.ship_battle!.crit_chance ?? 0}</b></Table.Cell>
+				<Table.Cell textAlign='center'><b>+{crew.ship_battle!.evasion ?? 0}</b></Table.Cell>
+			</Table.Row>
+		);
+	}
 
 	function renderTableRow(crew: any, idx: number): JSX.Element {
 		return (
@@ -454,8 +511,8 @@ const EventShuttlers = (props: EventShuttlersProps) => {
 										{shuttle.seats.map((seat, seatNum) => (
 											<Table.Row key={`${shuttleNum}_${seatNum}`}>
 												<Table.Cell><EventShuttlersSeat shuttleNum={shuttleNum} seatNum={seatNum} seat={seat} updateCallback={updateShuttleSeat} /></Table.Cell>
-												<Table.Cell><EventShuttlersCrewPicker shuttleNum={shuttleNum} seatNum={seatNum} seat={seat} skillsets={skillsets} assigned={assigned} updateCallback={updateAssignment} /></Table.Cell>
-												<Table.Cell><Button icon color='red' onClick={() => deleteShuttleSeat(shuttleNum, seatNum)}><Icon name='trash' /></Button></Table.Cell>
+												<Table.Cell textAlign='center'><EventShuttlersCrewPicker shuttleNum={shuttleNum} seatNum={seatNum} seat={seat} skillsets={skillsets} assigned={assigned} updateCallback={updateAssignment} /></Table.Cell>
+												<Table.Cell textAlign='right'><Button compact icon='trash' color='red' onClick={() => deleteShuttleSeat(shuttleNum, seatNum)} /></Table.Cell>
 											</Table.Row>
 										))}
 									</Table.Body>
@@ -689,6 +746,7 @@ const EventShuttlers = (props: EventShuttlersProps) => {
 		let seats = [];
 		for (let shuttleNum = 0; shuttleNum < shuttlers.shuttles.length; shuttleNum++) {
 			let shuttle = shuttlers.shuttles[shuttleNum];
+			if (shuttle.name.substr(0, 1) == '-') continue;
 			for (let seatNum = 0; seatNum < shuttle.seats.length; seatNum++) {
 				let ssId = getSkillSetId(shuttle.seats[seatNum]);
 				seats.push({
