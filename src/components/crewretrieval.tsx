@@ -11,11 +11,11 @@ import { useStateWithStorage } from '../utils/storage';
 
 const tableConfig: ITableConfigRow[] = [
 	{ width: 3, column: 'name', title: 'Crew' },
-	{ width: 1, column: 'max_rarity', title: 'Rarity' },
+	{ width: 1, column: 'max_rarity', title: 'Rarity', reverse: true },
 	{ width: 1, column: 'bigbook_tier', title: 'Tier (Legacy)' },
-	{ width: 1, column: 'cab_ov', title: 'CAB', defaultReverse: true },
+	{ width: 1, column: 'cab_ov', title: 'CAB', reverse: true },
 	{ width: 1, column: 'ranks.voyRank', title: 'Voyage' },
-	{ width: 1, column: 'collections.length', title: 'Collections', defaultReverse: true },
+	{ width: 1, column: 'collections.length', title: 'Collections', reverse: true },
 	{ width: 1, title: 'Useable Combos' }
 ];
 
@@ -48,7 +48,7 @@ const rarityOptions = [
 ];
 
 const collectionsOptions = [
-	{ key: 'co0', value: null, text: 'Any' }
+	{ key: 'co0', value: null, text: 'None or any' }
 ];
 
 const filterTraits = (polestar, trait) => {
@@ -252,8 +252,8 @@ const CrewRetrievalTable = (props: CrewRetrievalTableProps) => {
 
 	function renderTableRow(crew: any, idx: number): JSX.Element {
 		return (
-			<Table.Row key={idx} style={{ cursor: 'zoom-in' }} onClick={() => setActiveCrew(activeCrew === crew.symbol ? null : crew.symbol)}>
-				<Table.Cell onClick={(e) => { navigate(`/crew/${crew.symbol}/`); e.stopPropagation(); }}>
+			<Table.Row key={idx}>
+				<Table.Cell style={{ cursor: 'zoom-in' }} onClick={() => navigate(`/crew/${crew.symbol}/`)}>
 					<div
 						style={{
 							display: 'grid',
@@ -274,24 +274,29 @@ const CrewRetrievalTable = (props: CrewRetrievalTableProps) => {
 				<Table.Cell>
 					<Rating icon='star' rating={crew.highest_owned_rarity} maxRating={crew.max_rarity} size="large" disabled />
 				</Table.Cell>
-				<Table.Cell textAlign="center" style={{display: activeCrew === crew.symbol ? 'none' : 'table-cell' }}>
+				<Table.Cell textAlign="center" style={{ display: activeCrew === crew.symbol ? 'none' : 'table-cell' }}>
 					<b>{formatTierLabel(crew.bigbook_tier)}</b>
 				</Table.Cell>
-				<Table.Cell textAlign="center" style={{display: activeCrew === crew.symbol ? 'none' : 'table-cell' }}>
+				<Table.Cell textAlign="center" style={{ display: activeCrew === crew.symbol ? 'none' : 'table-cell' }}>
 					<b>{crew.cab_ov}</b><br />
 					<small>{rarityLabels[parseInt(crew.max_rarity)-1]} #{crew.cab_ov_rank}</small>
 				</Table.Cell>
-				<Table.Cell textAlign="center" style={{display: activeCrew === crew.symbol ? 'none' : 'table-cell' }}>
+				<Table.Cell textAlign="center" style={{ display: activeCrew === crew.symbol ? 'none' : 'table-cell' }}>
 					<b>#{crew.ranks.voyRank}</b><br />
 					{crew.ranks.voyTriplet && <small>Triplet #{crew.ranks.voyTriplet.rank}</small>}
 				</Table.Cell>
-				<Table.Cell textAlign="center" style={{display: activeCrew === crew.symbol ? 'none' : 'table-cell' }}>
+				<Table.Cell textAlign="center" style={{ display: activeCrew === crew.symbol ? 'none' : 'table-cell' }}>
 					<b>{crew.collections.length}</b>
 				</Table.Cell>
-				<Table.Cell textAlign="center" style={{display: activeCrew === crew.symbol ? 'table-cell' : 'none' }} colSpan={activeCrew === crew.symbol ? 4 : undefined}>
+				<Table.Cell textAlign="center" style={{ cursor: 'zoom-out', display: activeCrew === crew.symbol ? 'table-cell' : 'none' }}
+					colSpan={activeCrew === crew.symbol ? 4 : undefined}
+					onClick={(e) => { setActiveCrew(activeCrew === crew.symbol ? null : crew.symbol); e.stopPropagation(); }}
+				>
 					{findCombosForCrew(crew)}
 				</Table.Cell>
-				<Table.Cell textAlign="center">
+				<Table.Cell textAlign="center" style={{ cursor: activeCrew === crew.symbol ? 'zoom-out' : 'zoom-in' }}
+					onClick={(e) => { setActiveCrew(activeCrew === crew.symbol ? null : crew.symbol); e.stopPropagation(); }}
+				>
 					{activeCrew === crew.symbol ? 'Hide' : 'View'}
 				</Table.Cell>
 			</Table.Row>
@@ -299,6 +304,7 @@ const CrewRetrievalTable = (props: CrewRetrievalTableProps) => {
 	}
 
 	function findCombosForCrew(crew: any): JSX.Element {
+		if (activeCrew !== crew.symbol) return (<></>);
 		let filteredPolestars = ownedPolestars.filter((p) => disabledPolestars.indexOf(p.id) === -1);
 		let combos = crew.unique_polestar_combos?.filter(
 			(upc) => upc.every(
@@ -410,10 +416,10 @@ const PolestarsModal = (props: PolestarsModalProps) => {
 
 	function filterCheckboxGroupHeader(t: string): JSX.Element {
 		let group = grouped.find(group => group.title === t);
-		let groupLink = group ? (<span onClick={() => checkGroup(t, group.anyDisabled)}>{group.anyDisabled ? 'Check' : 'Uncheck'} All</span>) : (<></>);
+		let groupLink = group ? (<Button style={{ marginLeft: '1em' }} size='mini' onClick={() => checkGroup(t, group.anyDisabled)}>{group.anyDisabled ? 'Check' : 'Uncheck'} All</Button>): (<></>);
 		return (
 			<Grid.Column largeScreen={16} mobile={4} key={t}>
-				<strong>{t}</strong> - {groupLink}
+				<strong>{t}</strong> {groupLink}
 			</Grid.Column>
 		)
 	}
