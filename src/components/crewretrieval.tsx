@@ -207,7 +207,7 @@ const CrewRetrievalTool = (props: CrewRetrievalToolProps) => {
 					/>
 				</Form.Group>
 			</Form>
-			<CrewRetrievalTable ownedPolestars={ownedPolestars} disabledPolestars={disabledPolestars} data={data} />
+			<CrewTable ownedPolestars={ownedPolestars} disabledPolestars={disabledPolestars} data={data} />
 		</>
 	);
 
@@ -223,112 +223,6 @@ const CrewRetrievalTool = (props: CrewRetrievalToolProps) => {
 
 	function updateDisableds(newDisableds: number[]): void {
 		setDisabledPolestars([...newDisableds]);
-	}
-};
-
-type CrewRetrievalTableProps = {
-	data: any[];
-	ownedPolestars: any;
-	disabledPolestars: number[];
-};
-
-const CrewRetrievalTable = (props: CrewRetrievalTableProps) => {
-	const { data, ownedPolestars, disabledPolestars } = props;
-
-	const [activeCrew, setActiveCrew] = React.useState(null);
-
-	if (!data) return (<></>);
-
-	return (
-		<SearchableTable
-			id={"crewretrieval"}
-			data={data}
-			config={tableConfig}
-			renderTableRow={(crew, idx) => renderTableRow(crew, idx)}
-			filterRow={(crew, filters, filterType) => crewMatchesSearchFilter(crew, filters, filterType)}
-			showFilterOptions={true}
-		/>
-	);
-
-	function renderTableRow(crew: any, idx: number): JSX.Element {
-		return (
-			<Table.Row key={idx}>
-				<Table.Cell style={{ cursor: 'zoom-in' }} onClick={() => navigate(`/crew/${crew.symbol}/`)}>
-					<div
-						style={{
-							display: 'grid',
-							gridTemplateColumns: '60px auto',
-							gridTemplateAreas: `'icon stats' 'icon description'`,
-							gridGap: '1px'
-						}}
-					>
-						<div style={{ gridArea: 'icon' }}>
-							<img width={48} src={`${process.env.GATSBY_ASSETS_URL}${crew.imageUrlPortrait}`} />
-						</div>
-						<div style={{ gridArea: 'stats' }}>
-							<span style={{ fontWeight: 'bolder', fontSize: '1.25em' }}>{crew.name}</span>
-						</div>
-						<div style={{ gridArea: 'description' }}>{getCoolStats(crew, false, false)}</div>
-					</div>
-				</Table.Cell>
-				<Table.Cell>
-					<Rating icon='star' rating={crew.highest_owned_rarity} maxRating={crew.max_rarity} size="large" disabled />
-				</Table.Cell>
-				<Table.Cell textAlign="center" style={{ display: activeCrew === crew.symbol ? 'none' : 'table-cell' }}>
-					<b>{formatTierLabel(crew.bigbook_tier)}</b>
-				</Table.Cell>
-				<Table.Cell textAlign="center" style={{ display: activeCrew === crew.symbol ? 'none' : 'table-cell' }}>
-					<b>{crew.cab_ov}</b><br />
-					<small>{rarityLabels[parseInt(crew.max_rarity)-1]} #{crew.cab_ov_rank}</small>
-				</Table.Cell>
-				<Table.Cell textAlign="center" style={{ display: activeCrew === crew.symbol ? 'none' : 'table-cell' }}>
-					<b>#{crew.ranks.voyRank}</b><br />
-					{crew.ranks.voyTriplet && <small>Triplet #{crew.ranks.voyTriplet.rank}</small>}
-				</Table.Cell>
-				<Table.Cell textAlign="center" style={{ display: activeCrew === crew.symbol ? 'none' : 'table-cell' }}>
-					<b>{crew.collections.length}</b>
-				</Table.Cell>
-				<Table.Cell textAlign="center" style={{ cursor: 'zoom-out', display: activeCrew === crew.symbol ? 'table-cell' : 'none' }}
-					colSpan={activeCrew === crew.symbol ? 4 : undefined}
-					onClick={(e) => { setActiveCrew(activeCrew === crew.symbol ? null : crew.symbol); e.stopPropagation(); }}
-				>
-					{findCombosForCrew(crew)}
-				</Table.Cell>
-				<Table.Cell textAlign="center" style={{ cursor: activeCrew === crew.symbol ? 'zoom-out' : 'zoom-in' }}
-					onClick={(e) => { setActiveCrew(activeCrew === crew.symbol ? null : crew.symbol); e.stopPropagation(); }}
-				>
-					{activeCrew === crew.symbol ? 'Hide' : 'View'}
-				</Table.Cell>
-			</Table.Row>
-		);
-	}
-
-	function findCombosForCrew(crew: any): JSX.Element {
-		if (activeCrew !== crew.symbol) return (<></>);
-		let filteredPolestars = ownedPolestars.filter((p) => disabledPolestars.indexOf(p.id) === -1);
-		let combos = crew.unique_polestar_combos?.filter(
-			(upc) => upc.every(
-				(trait) => filteredPolestars.some(op => filterTraits(op, trait))
-			)
-		).map((upc) => upc.map((trait) => ownedPolestars.find((op) => filterTraits(op, trait))));
-		return (
-			<div>
-				<div className='title' style={{ marginBottom: '1em' }}><b>{`${combos.length} ${crew.name}`} Combos</b></div>
-				<div className='content'>
-					<Grid columns='equal'>
-						{combos.map((combo, cdx) => (
-							<Grid.Row key={'combo'+cdx}>
-								{combo.map((polestar, pdx) => (
-									<Grid.Column key={'combo'+cdx+',polestar'+pdx}>
-										<img width={32} src={`${process.env.GATSBY_ASSETS_URL}${polestar.icon.file.substr(1).replace(/\//g, '_')}`} /><br />{polestar.name.replace(' Polestar', '').replace(' Skill', '')}<br /><small>({polestar.quantity})</small>
-									</Grid.Column>
-								))}
-							</Grid.Row>
-						))}
-					</Grid>
-				</div>
-			</div>
-		);
 	}
 };
 
@@ -457,5 +351,218 @@ const PolestarsModal = (props: PolestarsModalProps) => {
 		}
 	}
 };
+
+type CrewTableProps = {
+	data: any[];
+	ownedPolestars: any;
+	disabledPolestars: number[];
+};
+
+const CrewTable = (props: CrewTableProps) => {
+	const { data, ownedPolestars, disabledPolestars } = props;
+
+	const [activeCrew, setActiveCrew] = React.useState(null);
+
+	if (!data) return (<></>);
+
+	return (
+		<SearchableTable
+			id={"crewretrieval"}
+			data={data}
+			config={tableConfig}
+			renderTableRow={(crew, idx) => renderTableRow(crew, idx)}
+			filterRow={(crew, filters, filterType) => crewMatchesSearchFilter(crew, filters, filterType)}
+			showFilterOptions={true}
+		/>
+	);
+
+	function renderTableRow(crew: any, idx: number): JSX.Element {
+		return (
+			<Table.Row key={idx}>
+				<Table.Cell style={{ cursor: 'zoom-in' }} onClick={() => navigate(`/crew/${crew.symbol}/`)}>
+					<div
+						style={{
+							display: 'grid',
+							gridTemplateColumns: '60px auto',
+							gridTemplateAreas: `'icon stats' 'icon description'`,
+							gridGap: '1px'
+						}}
+					>
+						<div style={{ gridArea: 'icon' }}>
+							<img width={48} src={`${process.env.GATSBY_ASSETS_URL}${crew.imageUrlPortrait}`} />
+						</div>
+						<div style={{ gridArea: 'stats' }}>
+							<span style={{ fontWeight: 'bolder', fontSize: '1.25em' }}>{crew.name}</span>
+						</div>
+						<div style={{ gridArea: 'description' }}>{getCoolStats(crew, false, false)}</div>
+					</div>
+				</Table.Cell>
+				<Table.Cell>
+					<Rating icon='star' rating={crew.highest_owned_rarity} maxRating={crew.max_rarity} size="large" disabled />
+				</Table.Cell>
+				<Table.Cell textAlign="center" style={{ display: activeCrew === crew.symbol ? 'none' : 'table-cell' }}>
+					<b>{formatTierLabel(crew.bigbook_tier)}</b>
+				</Table.Cell>
+				<Table.Cell textAlign="center" style={{ display: activeCrew === crew.symbol ? 'none' : 'table-cell' }}>
+					<b>{crew.cab_ov}</b><br />
+					<small>{rarityLabels[parseInt(crew.max_rarity)-1]} #{crew.cab_ov_rank}</small>
+				</Table.Cell>
+				<Table.Cell textAlign="center" style={{ display: activeCrew === crew.symbol ? 'none' : 'table-cell' }}>
+					<b>#{crew.ranks.voyRank}</b><br />
+					{crew.ranks.voyTriplet && <small>Triplet #{crew.ranks.voyTriplet.rank}</small>}
+				</Table.Cell>
+				<Table.Cell textAlign="center" style={{ display: activeCrew === crew.symbol ? 'none' : 'table-cell' }}>
+					<b>{crew.collections.length}</b>
+				</Table.Cell>
+				<Table.Cell textAlign="center" style={{ display: activeCrew === crew.symbol ? 'table-cell' : 'none' }}
+					colSpan={activeCrew === crew.symbol ? 4 : undefined}
+				>
+					{showCombosForCrew(crew)}
+				</Table.Cell>
+				<Table.Cell textAlign="center" style={{ cursor: activeCrew === crew.symbol ? 'zoom-out' : 'zoom-in' }}
+					onClick={(e) => { setActiveCrew(activeCrew === crew.symbol ? null : crew.symbol); e.stopPropagation(); }}
+				>
+					{activeCrew === crew.symbol ? 'Hide' : 'View'}
+				</Table.Cell>
+			</Table.Row>
+		);
+	}
+
+	function showCombosForCrew(crew: any): JSX.Element {
+		if (activeCrew !== crew.symbol) return (<></>);
+
+		let filteredPolestars = ownedPolestars.filter((p) => disabledPolestars.indexOf(p.id) === -1);
+		let combos = crew.unique_polestar_combos?.filter(
+			(upc) => upc.every(
+				(trait) => filteredPolestars.some(op => filterTraits(op, trait))
+			)
+		).map((upc) => upc.map((trait) => ownedPolestars.find((op) => filterTraits(op, trait))));
+		if (combos.length == 0) return (<></>);
+
+		let groups = groupByPotential(combos, 0, []);
+
+		return (<ComboGrid crew={crew} combos={combos} groups={groups} />);
+	}
+
+	function groupByPotential(combos: any[], start: number, group: number[]): number[] {
+		const groups = {};
+		const consumed = {};
+		group.forEach((comboId) => {
+			combos[comboId].forEach((polestar) => {
+				if (consumed[polestar.symbol])
+					consumed[polestar.symbol]++;
+				else
+					consumed[polestar.symbol] = 1;
+			});
+		});
+		combos.forEach((combo, comboId) => {
+			if (comboId >= start) {
+				let consumable = 0;
+				combo.forEach((polestar) => {
+					if (!consumed[polestar.symbol] || polestar.quantity-consumed[polestar.symbol] >= 1)
+						consumable++;
+				});
+				if (consumable == combo.length) {
+					const newGroup = [...group, comboId];
+					const potentialId = '+'+newGroup.length;
+					if (groups[potentialId])
+						groups[potentialId].push(newGroup);
+					else
+						groups[potentialId] = [newGroup];
+					if (comboId+1 < combos.length) {
+						let childGroups = groupByPotential(combos, comboId+1, newGroup);
+						for (let childId in childGroups) {
+							if (groups[childId])
+								groups[childId] = groups[childId].concat(childGroups[childId]);
+							else
+								groups[childId] = childGroups[childId];
+						}
+					}
+				}
+			}
+		});
+		return groups;
+	}
+};
+
+type ComboGridProps = {
+	crew: any;
+	combos: any[];
+	groups: any[];
+};
+
+const ComboGrid = ((props: ComboGridProps) => {
+	const { crew, groups } = props;
+
+	let [fuseIndex, setFuseIndex] = React.useState(1);
+	let [groupIndex, setGroupIndex] = React.useState(undefined);
+
+	const potentialFuses = [];
+	[1, 2, 3, 4, 5].forEach(potential => {
+		const potentialId = '+'+potential;
+		if (groups[potentialId] && groups[potentialId].length > 0) {
+			potentialFuses.push({ key: potential, value: potential, text: potentialId });
+		}
+	});
+
+	const potentialGroups = groups['+'+fuseIndex];
+	let potentialOptions = [];
+
+	let combos = [...props.combos];
+	if (!potentialGroups || potentialGroups.length == 0) {
+		fuseIndex = 1;
+		groupIndex = undefined;
+	}
+	if (fuseIndex > 1) {
+		if (!groupIndex || !potentialGroups[groupIndex])
+			groupIndex = 0;
+		combos = combos.filter((combo, comboId) => potentialGroups[groupIndex].indexOf(comboId) >= 0);
+		if (potentialGroups.length > 1) {
+			potentialOptions = potentialGroups.map((group, groupId) => {
+				return { key: groupId, value: groupId, text: 'Option '+(groupId+1) };
+			});
+		}
+	}
+
+	return (
+		<div>
+			<div className='title' style={{ marginBottom: '1em' }}>
+				Use <b>{fuseIndex == 1 ? 'any combo' : 'all combos'}</b> below to retrieve
+				{potentialFuses.length > 1 && (
+					<Dropdown
+						style={{ marginLeft: '1em' }}
+						options={potentialFuses}
+						value={fuseIndex}
+						onChange={(e, { value }) => setFuseIndex(value)}
+					/>
+				)}
+				<b style={{ marginLeft: '.5em' }}>{crew.name}</b>
+				{potentialOptions.length > 0 && (
+					<Dropdown scrolling
+						style={{ marginLeft: '1em' }}
+						options={potentialOptions}
+						value={groupIndex}
+						onChange={(e, { value }) => setGroupIndex(value)}
+					/>
+				)}
+			</div>
+			<div className='content'>
+				<Grid columns='equal'>
+					{combos.map((combo, comboId) =>
+						<Grid.Row key={'combo'+comboId}>
+							{combo.map((polestar, pdx) => (
+								<Grid.Column key={'combo'+comboId+',polestar'+pdx}>
+									<img width={32} src={`${process.env.GATSBY_ASSETS_URL}${polestar.icon.file.substr(1).replace(/\//g, '_')}`} />
+									<br />{polestar.name.replace(' Polestar', '').replace(' Skill', '')}
+									<br /><small>({polestar.quantity})</small>
+								</Grid.Column>
+							))}
+						</Grid.Row>
+					)}
+				</Grid>
+			</div>
+		</div>
+	);
+});
 
 export default CrewRetrieval;
