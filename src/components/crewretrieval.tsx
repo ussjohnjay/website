@@ -40,7 +40,6 @@ const rarityLabels = ['Common', 'Uncommon', 'Rare', 'Super Rare', 'Legendary'];
 
 const rarityOptions = [
 	{ key: 'ro0', value: null, text: 'Any rarity' },
-	{ key: 'ro1', value: '1', text: 'Minimum 1*' },
 	{ key: 'ro2', value: '2', text: 'Minimum 2*' },
 	{ key: 'ro3', value: '3', text: 'Minimum 3*' },
 	{ key: 'ro4', value: '4', text: 'Minimum 4*' },
@@ -91,8 +90,11 @@ const CrewRetrieval = (props: CrewRetrievalProps) => {
 				owned.forEach((p) => { p.quantity = playerData.forte_root.items.find(k => k.id === p.id).quantity });
 				setOwnedPolestars(owned);
 			});
+		return (<><Icon loading name='spinner' /> Loading...</>);
+	}
 
-		// Update collections statuses here
+	// Only need to update collections statuses once
+	if (collectionsOptions.length == 1) {
 		let cArr = [...new Set(allCrew.map(a => a.collections).flat())].sort();
 		cArr.forEach(c => {
 			if (!collectionsOptions.find(co => co.value == c)) {
@@ -115,9 +117,6 @@ const CrewRetrieval = (props: CrewRetrievalProps) => {
 			}
 		});
 	}
-
-	if (!ownedPolestars)
-		return (<><Icon loading name='spinner' /> Loading...</>);
 
 	return (<CrewRetrievalTool playerData={playerData} allCrew={JSON.parse(JSON.stringify(allCrew))} ownedPolestars={ownedPolestars} />);
 };
@@ -362,6 +361,7 @@ const CrewTable = (props: CrewTableProps) => {
 	const { data, ownedPolestars, disabledPolestars } = props;
 
 	const [activeCrew, setActiveCrew] = React.useState(null);
+	const [activeCollections, setActiveCollections] = React.useState(null);
 
 	if (!data) return (<></>);
 
@@ -411,8 +411,11 @@ const CrewTable = (props: CrewTableProps) => {
 					<b>#{crew.ranks.voyRank}</b><br />
 					{crew.ranks.voyTriplet && <small>Triplet #{crew.ranks.voyTriplet.rank}</small>}
 				</Table.Cell>
-				<Table.Cell textAlign="center" style={{ display: activeCrew === crew.symbol ? 'none' : 'table-cell' }}>
-					<b>{crew.collections.length}</b>
+				<Table.Cell textAlign="center"
+					style={{ cursor: activeCollections === crew.symbol ? 'zoom-out' : 'zoom-in', display: activeCrew === crew.symbol ? 'none' : 'table-cell' }}
+					onClick={() => { setActiveCollections(activeCollections === crew.symbol ? null : crew.symbol) }}
+				>
+					{showCollectionsForCrew(crew)}
 				</Table.Cell>
 				<Table.Cell textAlign="center" style={{ display: activeCrew === crew.symbol ? 'table-cell' : 'none' }}
 					colSpan={activeCrew === crew.symbol ? 4 : undefined}
@@ -437,15 +440,17 @@ const CrewTable = (props: CrewTableProps) => {
 				(trait) => filteredPolestars.some(op => filterTraits(op, trait))
 			)
 		).map((upc) => upc.map((trait) => ownedPolestars.find((op) => filterTraits(op, trait))));
+
+		// Exit here if activecrew has 0 combos after changing filters
 		if (combos.length == 0) return (<></>);
 
-		let groups = groupByPotential(combos, 0, []);
+		let fuseGroups = groupByFuses(combos, 0, []);
 
-		return (<ComboGrid crew={crew} combos={combos} groups={groups} />);
+		return (<ComboGrid crew={crew} combos={combos} fuseGroups={fuseGroups} />);
 	}
 
-	function groupByPotential(combos: any[], start: number, group: number[]): number[] {
-		const groups = {};
+	function groupByFuses(combos: any[], start: number, group: number[]): any {
+		const fuseGroups = {};
 		const consumed = {};
 		group.forEach((comboId) => {
 			combos[comboId].forEach((polestar) => {
@@ -463,95 +468,106 @@ const CrewTable = (props: CrewTableProps) => {
 						consumable++;
 				});
 				if (consumable == combo.length) {
-					const newGroup = [...group, comboId];
-					const potentialId = '+'+newGroup.length;
-					if (groups[potentialId])
-						groups[potentialId].push(newGroup);
+					const parentGroup = [...group, comboId];
+					const parentId = 'x'+parentGroup.length;
+					if (fuseGroups[parentId])
+						fuseGroups[parentId].push(parentGroup);
 					else
-						groups[potentialId] = [newGroup];
-					if (comboId+1 < combos.length) {
-						let childGroups = groupByPotential(combos, comboId+1, newGroup);
-						for (let childId in childGroups) {
-							if (groups[childId])
-								groups[childId] = groups[childId].concat(childGroups[childId]);
-							else
-								groups[childId] = childGroups[childId];
-						}
+						fuseGroups[parentId] = [parentGroup];
+					let childGroups = groupByFuses(combos, comboId, parentGroup);
+					for (let childId in childGroups) {
+						if (fuseGroups[childId])
+							fuseGroups[childId] = fuseGroups[childId].concat(childGroups[childId]);
+						else
+							fuseGroups[childId] = childGroups[childId];
 					}
 				}
 			}
 		});
-		return groups;
+		return fuseGroups;
+	}
+
+	function showCollectionsForCrew(crew: any): JSX.Element {
+		if (activeCollections !== crew.symbol || crew.collections.length == 0)
+			return (<b>{crew.collections.length}</b>);
+
+		const formattedCollections = crew.collections.map((c, idx) => (
+			<span key={idx}>{c}{idx < crew.collections.length-1 ? ',' : ''}</span>
+		)).reduce((prev, curr) => [prev, ' ', curr]);
+
+		return (
+			<div>
+				{formattedCollections}
+			</div>
+		);
 	}
 };
 
 type ComboGridProps = {
 	crew: any;
 	combos: any[];
-	groups: any[];
+	fuseGroups: any;
 };
 
 const ComboGrid = ((props: ComboGridProps) => {
-	const { crew, groups } = props;
+	const { crew, fuseGroups } = props;
+	let combos = [...props.combos];
 
 	let [fuseIndex, setFuseIndex] = React.useState(1);
-	let [groupIndex, setGroupIndex] = React.useState(undefined);
+	let [groupIndex, setGroupIndex] = React.useState(0);
 
-	const potentialFuses = [];
-	[1, 2, 3, 4, 5].forEach(potential => {
-		const potentialId = '+'+potential;
-		if (groups[potentialId] && groups[potentialId].length > 0) {
-			potentialFuses.push({ key: potential, value: potential, text: potentialId });
+	React.useEffect(() => {
+		setGroupIndex(0);
+	}, [fuseIndex]);
+
+	// Reset indices if out of bounds after changing filters
+	if (!fuseGroups['x'+fuseIndex]) fuseIndex = 1;
+	const groups = fuseGroups['x'+fuseIndex];
+	if (!groups[groupIndex]) groupIndex = 0;
+
+	const fuseOptions = [];
+	[1, 2, 3, 4, 5].forEach(fuse => {
+		const fuseId = 'x'+fuse;
+		if (fuseGroups[fuseId] && fuseGroups[fuseId].length > 0) {
+			fuseOptions.push({ key: fuse, value: fuse, text: fuseId });
 		}
 	});
 
-	const potentialGroups = groups['+'+fuseIndex];
-	let potentialOptions = [];
-
-	let combos = [...props.combos];
-	if (!potentialGroups || potentialGroups.length == 0) {
-		fuseIndex = 1;
-		groupIndex = undefined;
-	}
+	let groupOptions = [];
 	if (fuseIndex > 1) {
-		if (!groupIndex || !potentialGroups[groupIndex])
-			groupIndex = 0;
-		combos = combos.filter((combo, comboId) => potentialGroups[groupIndex].indexOf(comboId) >= 0);
-		if (potentialGroups.length > 1) {
-			potentialOptions = potentialGroups.map((group, groupId) => {
-				return { key: groupId, value: groupId, text: 'Option '+(groupId+1) };
-			});
-		}
+		combos = groups[groupIndex].map((comboId) => combos[comboId]);
+		groupOptions = groups.map((group, groupId) => {
+			return { key: groupId, value: groupId, text: 'Option '+(groupId+1) };
+		});
 	}
 
 	return (
 		<div>
 			<div className='title' style={{ marginBottom: '1em' }}>
-				Use <b>{fuseIndex == 1 ? 'any combo' : 'all combos'}</b> below to retrieve
-				{potentialFuses.length > 1 && (
+				Use <b>{fuseIndex == 1 ? combos.length == 1 ? 'the combo' : 'any combo' : 'all combos'}</b> below to retrieve <b>{crew.name}</b>
+				{fuseOptions.length > 1 && (
 					<Dropdown
 						style={{ marginLeft: '1em' }}
-						options={potentialFuses}
+						options={fuseOptions}
 						value={fuseIndex}
 						onChange={(e, { value }) => setFuseIndex(value)}
 					/>
 				)}
-				<b style={{ marginLeft: '.5em' }}>{crew.name}</b>
-				{potentialOptions.length > 0 && (
+				{groupOptions.length > 1 && (
 					<Dropdown scrolling
 						style={{ marginLeft: '1em' }}
-						options={potentialOptions}
+						options={groupOptions}
 						value={groupIndex}
 						onChange={(e, { value }) => setGroupIndex(value)}
 					/>
 				)}
 			</div>
 			<div className='content'>
-				<Grid columns='equal'>
-					{combos.map((combo, comboId) =>
-						<Grid.Row key={'combo'+comboId}>
+				<Grid columns='equal' onClick={() => cycleGroupOptions()}>
+					{combos.map((combo, cdx) =>
+						<Grid.Row key={'combo'+cdx}>
 							{combo.map((polestar, pdx) => (
-								<Grid.Column key={'combo'+comboId+',polestar'+pdx}>
+								<Grid.Column key={'combo'+cdx+',polestar'+pdx}>
 									<img width={32} src={`${process.env.GATSBY_ASSETS_URL}${polestar.icon.file.substr(1).replace(/\//g, '_')}`} />
 									<br />{polestar.name.replace(' Polestar', '').replace(' Skill', '')}
 									<br /><small>({polestar.quantity})</small>
@@ -563,6 +579,11 @@ const ComboGrid = ((props: ComboGridProps) => {
 			</div>
 		</div>
 	);
+
+	function cycleGroupOptions(): void {
+		if (groups.length <= 1) return;
+		setGroupIndex(groupIndex+1 < groups.length ? groupIndex+1 : 0);
+	}
 });
 
 export default CrewRetrieval;
