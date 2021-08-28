@@ -64,13 +64,14 @@ const filterTraits = (polestar, trait) => {
 
 type CrewRetrievalProps = {
 	playerData: any;
-	allCrew: any;
+	allCrew: any[];
 };
 
 const CrewRetrieval = (props: CrewRetrievalProps) => {
 	const { playerData, allCrew } = props;
 
 	const [ownedPolestars, setOwnedPolestars] = React.useState(undefined);
+	const [ownedConstellations, setOwnedConstellations] = React.useState(undefined);
 
 	if (!playerData?.forte_root) {
 		return (
@@ -86,9 +87,15 @@ const CrewRetrieval = (props: CrewRetrievalProps) => {
 		fetch('/structured/keystones.json')
 			.then(response => response.json())
 			.then(allkeystones => {
-				let owned = allkeystones.filter((k) => k.type === 'keystone' && playerData.forte_root.items.some((f) => f.id === k.id));
-				owned.forEach((p) => { p.quantity = playerData.forte_root.items.find(k => k.id === p.id).quantity });
-				setOwnedPolestars(owned);
+				let ownedKeystones = allkeystones.filter((k) => k.type === 'keystone' && playerData.forte_root.items.some((f) => f.id === k.id));
+				ownedKeystones.forEach((p) => { p.quantity = playerData.forte_root.items.find(k => k.id === p.id).quantity });
+				setOwnedPolestars(ownedKeystones);
+				let ownedCrates = allkeystones.filter((k) => k.type === 'crew_keystone_crate' && playerData.forte_root.items.some((f) => f.id === k.id));
+				ownedCrates.forEach((ckc) => {
+					ckc.quantity = playerData.forte_root.items.find(k => k.id === ckc.id).quantity;
+					ckc.polestars = ckc.keystones.map((kId) => allkeystones.find(k => k.id === kId));
+				});
+				setOwnedConstellations(ownedCrates);
 			});
 		return (<><Icon loading name='spinner' /> Loading...</>);
 	}
@@ -118,16 +125,21 @@ const CrewRetrieval = (props: CrewRetrievalProps) => {
 		});
 	}
 
-	return (<CrewRetrievalTool playerData={playerData} allCrew={JSON.parse(JSON.stringify(allCrew))} ownedPolestars={ownedPolestars} />);
+	return (
+		<React.Fragment>
+			<CrewRetrievalForm playerData={playerData} allCrew={allCrew} ownedPolestars={ownedPolestars} />
+			<ConstellationsForm playerData={playerData} allCrew={allCrew} ownedPolestars={ownedPolestars} ownedConstellations={ownedConstellations} />
+		</React.Fragment>
+	);
 };
 
-type CrewRetrievalToolProps = {
+type CrewRetrievalFormProps = {
 	playerData: any;
-	allCrew: any;
+	allCrew: any[];
 	ownedPolestars: any;
 };
 
-const CrewRetrievalTool = (props: CrewRetrievalToolProps) => {
+const CrewRetrievalForm = (props: CrewRetrievalFormProps) => {
 	const { playerData, allCrew, ownedPolestars } = props;
 
 	const [disabledPolestars, setDisabledPolestars] = useStateWithStorage('crewretrieval/disabledPolestars', []);
@@ -175,7 +187,7 @@ const CrewRetrievalTool = (props: CrewRetrievalToolProps) => {
 	}
 
 	return (
-		<>
+		<React.Fragment>
 			<p>Quantum: <strong>{energy.quantity}</strong>. {energyMessage}</p>
 			<p>Here are all the crew who you can perform a 100% guaranteed crew retrieval for, using the polestars currently in your inventory:</p>
 			<Form>
@@ -207,7 +219,7 @@ const CrewRetrievalTool = (props: CrewRetrievalToolProps) => {
 				</Form.Group>
 			</Form>
 			<CrewTable ownedPolestars={ownedPolestars} disabledPolestars={disabledPolestars} data={data} />
-		</>
+		</React.Fragment>
 	);
 
 	function findHighestOwnedRarityForCrew(crew: any[], crewSymbol: string, excludeFF: boolean): number {
@@ -585,5 +597,102 @@ const ComboGrid = ((props: ComboGridProps) => {
 		setGroupIndex(groupIndex+1 < groups.length ? groupIndex+1 : 0);
 	}
 });
+
+type ConstellationsFormProps = {
+	playerData: any;
+	allCrew: any[];
+	ownedPolestars: any;
+	ownedConstellations: any;
+};
+
+const ConstellationsForm = (props: ConstellationsFormProps) => {
+	const { playerData, allCrew, ownedPolestars, ownedConstellations } = props;
+
+	const [constellationIndex, setConstellationIndex] = React.useState(undefined);
+
+	if (!ownedConstellations) return (<></>);
+
+	const constellation = constellationIndex >= 0 ? ownedConstellations[constellationIndex] : undefined;
+
+	const constellationOptions = ownedConstellations.map((c, cdx) => {
+		return { key: c.symbol, value: cdx, text: c.name };
+	});
+
+	return (
+		<React.Fragment>
+			<Header as='h4'>Constellations Helper</Header>
+			<Dropdown selection clearable
+				placeholder="Constellation"
+				options={constellationOptions}
+				value={constellationIndex}
+				onChange={(e, { value }) => setConstellationIndex(value)}
+			/>
+			{constellation && (<ConstellationTable constellation={constellation} allCrew={allCrew} ownedPolestars={ownedPolestars} />)}
+		</React.Fragment>
+	);
+};
+
+type ConstellationTableProps = {
+	constellation: any;
+	allCrew: any[];
+	ownedPolestars: any;
+};
+
+const ConstellationTable = (props: ConstellationTableProps) => {
+	const { constellation, allCrew, ownedPolestars } = props;
+
+	const unownedPolestars = constellation.polestars.filter(p => !p.quantity || p.quantity == 0);
+	const unownedPolestarOdds = unownedPolestars.length/constellation.polestars.length;
+
+	const listPolestars = polestars => {
+		return polestars.map((p, pdx) => (
+				<span key={pdx}><b>{p.short_name}</b>{pdx < polestars.length-1 ? ',' : ''}</span>
+			)).reduce((prev, curr) => [prev, ' ', curr]);
+	};
+
+	const getRetrievable = polestars => {
+		return allCrew.filter(crew =>
+			crew.unique_polestar_combos?.some(upc =>
+				upc.every(trait => polestars.some(op => filterTraits(op, trait)))
+			)
+		);
+	};
+
+	const control = getRetrievable(ownedPolestars);
+	console.log(control);
+
+	const potentials = [];
+	unownedPolestars.forEach(p => {
+		const ownedPlus = JSON.parse(JSON.stringify(ownedPolestars));
+		ownedPlus.push({...p, quantity: 1});
+		const retrievablePlus = getRetrievable(ownedPlus);
+		retrievablePlus.filter(pc => !control.some(cc => cc.symbol == pc.symbol)).forEach(crew => {
+			potentials.push({...crew, plus_trait: p.filter.trait});
+		});
+	});
+	console.log(potentials);
+
+	return (
+		<React.Fragment>
+			<div style={{ marginTop: '1em' }} dangerouslySetInnerHTML={{ __html: constellation.flavor }} />
+			<p>
+				<b>{Math.floor(1/constellation.polestars.length*100)}%</b> chance of discovering any polestar from this constellation;{` `}
+				<b>{Math.floor(unownedPolestarOdds*100)}%</b> chance of discovering an unowned polestar{unownedPolestars.length > 0 ? ': ' : ''}{listPolestars(unownedPolestars)}
+			</p>
+			<Grid columns={6} centered padded>
+				{constellation.polestars.map((p, pdx) => (
+				<Grid.Column key={pdx} textAlign='center'>
+					<img width={48} src={`${process.env.GATSBY_ASSETS_URL}${p.icon.file.substr(1).replace(/\//g, '_')}`} />
+					<br/ >
+					<span style={{ fontWeight: 'bolder' }}>
+						{p.short_name}
+					</span>
+					<br />({p.quantity ?? 0})
+				</Grid.Column>
+				))}
+			</Grid>
+		</React.Fragment>
+	);
+};
 
 export default CrewRetrieval;
